@@ -1,0 +1,117 @@
+---
+title: "ACTU302_Assigment_3"
+output:
+  word_document: default
+  html_document: default
+date: "2025-07-30"
+---
+
+
+```{r}
+library(insuranceData)
+data(AutoClaims)
+head(AutoClaims)
+```
+
+```{r}
+Samp_Auto<- sample(x=AutoClaims$PAID,size = 200, replace= FALSE)
+head(Samp_Auto)
+```
+```{r}
+likeli.gamma<- function(par,x){
+  shape <- par[1]
+  rate <- par[2]
+  logli <- suppressWarnings(sum(dgamma(x,shape = shape,rate = rate,log = TRUE)))
+  return(-logli)
+}
+MLE.gam<-suppressWarnings(optim(par = c(2,5),fn=likeli.gamma, method = "Nelder-Mead",x=Samp_Auto))
+MLE.gam$par
+```
+
+```{r}
+Mom.gamma <- function(x){
+  alpha.hat <- ((mean(x))^2)/var(x)
+  beta.hat <- mean(x)/var(x)
+  Tab <- c(alpha.hat,beta.hat)
+  names(Tab)<- c("Alpha","Beta")
+  return(Tab)
+}
+mom_est<-Mom.gamma(Samp_Auto)
+mom_est
+```
+
+
+```{r}   
+shape_mle <- MLE.gam$par[1]
+rate_mle <- MLE.gam$par[2]
+
+shape_mom <- mom_est["Alpha"]
+rate_mom <- mom_est["Beta"]
+hist(Samp_Auto,xlab = "Claim Amount (PAID)",probability = TRUE,main = "")
+```
+```{r}
+Sort_Sample_Auto <- sort(Samp_Auto)
+hist(Samp_Auto,xlab = "Claim Amount (PAID)",probability = TRUE,main = "")
+lines(Sort_Sample_Auto, dgamma(Sort_Sample_Auto, shape = shape_mom, rate = rate_mom),
+      col = "red", lwd = 2, lty = 2)
+lines(Sort_Sample_Auto, dgamma(Sort_Sample_Auto, shape = shape_mle, rate = rate_mle),
+      col = "blue", lwd = 2, lty = 1)
+legend("topright",
+       legend = c("MoM Fit", "MLE Fit"),
+       col = c("red", "blue"),
+       lty = c(2, 1),  # dashed for MoM, solid for MLE
+       lwd = 2,
+       bty = "n") 
+```
+
+
+```{r}
+BiasMSE.fun <- function(theta.hat,theta)
+{
+  Bias<-mean(theta.hat)-theta
+  MSE <- mean((theta.hat-theta)^2)
+  tab2 <- c(Bias,MSE)
+  names(tab2)<- c("Bias","MSE")
+  return(tab2)
+}
+```
+
+
+
+
+```{r}
+DataSim<- sapply(1:1000,function(i)sample(x=AutoClaims$PAID,size = 200, replace= TRUE))
+Est.shRate_mom<- apply(DataSim,2,Mom.gamma)
+bias_mse_mom_shape<- BiasMSE.fun(theta.hat = Est.shRate_mom[1,],
+            theta = shape_mom)
+bias_mse_mom_rate<- BiasMSE.fun(theta.hat = Est.shRate_mom[2,],
+            theta = rate_mom)
+print(rbind(
+  MLE_Shape = bias_mse_mom_shape,
+  MLE_Rate = bias_mse_mom_rate))
+```
+```{r}
+MLE.gamma<- function(sampled){
+  suppressWarnings(optim(par = c(2,5),
+  fn = likeli.gamma, method = "Nelder-Mead", x = sampled)$par)
+}
+Est.shRate_mle<- apply(DataSim,2,MLE.gamma)
+bias_mse_mle_shape<- BiasMSE.fun(theta.hat = Est.shRate_mle[1,],
+            theta = shape_mle)
+bias_mse_mle_rate<- BiasMSE.fun(theta.hat = Est.shRate_mle[2,],
+            theta = rate_mle)
+print(rbind(MOM_Shape = bias_mse_mle_shape,
+  MOM_Rate = bias_mse_mle_rate))
+```
+
+
+```{r}
+results <- rbind(
+  MLE_Shape = bias_mse_mle_shape,
+  MLE_Rate = bias_mse_mle_rate,
+  MOM_Shape = bias_mse_mom_shape,
+  MOM_Rate = bias_mse_mom_rate
+)
+round(results,5)
+```
+
